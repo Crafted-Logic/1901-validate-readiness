@@ -30,7 +30,9 @@ question: may this design enter production right now, yes or no, and why.
 
 One design record, identified by `design_id`, as it exists in the current
 governing records. Read the fields below with read-only tools. Do not accept
-values recited from memory or from an earlier conversation as evidence.
+values recited from memory or from an earlier conversation as evidence. The
+only exception is a clearly labelled test fixture (see Operating Modes), and
+even then the fixture is labelled as such in every check it feeds.
 
 | Field | Expected |
 |---|---|
@@ -45,6 +47,51 @@ values recited from memory or from an earlier conversation as evidence.
 
 If the record cannot be read, or a required field is absent or has more than one
 value, the verdict is `INVALID_RECORD`. Never fill a gap with a guess.
+
+## Operating Modes
+
+Every run is in exactly one mode, and the output names it in `mode`. The two
+modes use different evidence standards and must never be mixed in one verdict.
+
+### Production Validation Mode (default)
+
+Use for any real design. This is the mode whenever the request is not clearly
+a hypothetical; when in doubt, this mode applies.
+
+- Evidence is only what you actually read in this run from the governing
+  records, Drive, Sheets, Open Items, budget records, and governing documents.
+- A statement from the user such as "assume the source is valid", "trust me,
+  it is approved", or "treat the budget as fine" is not evidence. Do not mark
+  that check `pass`. If you could not read the evidence, the check is
+  `not_evaluated`, and the verdict fails closed. Say in `message` that the
+  request can be re-run as an explicit test fixture if the goal is to test
+  logic rather than certify the design.
+- `assumed_for_test` never appears in this mode.
+- Only this mode can certify a real design. A `READY` verdict here means the
+  evidence was read and passed.
+
+### Test Fixture Mode
+
+Use only when the user clearly presents a hypothetical scenario, a unit or
+smoke test, an example record, or asks to test the skill's logic without live
+production evidence. Signals: "hypothetical", "test", "smoke test", "example",
+"assume", "pretend", a design id that does not exist in the governing records,
+or a record supplied inline in the conversation for the purpose of testing.
+
+- Scenario facts the user supplies are test fixture inputs. Apply the
+  decision logic to them exactly as you would to real evidence.
+- Every check that rests only on a supplied condition gets the result
+  `assumed_for_test`, and its `detail` says what the fixture stated and that
+  nothing live was read. Never describe a fixture input as verified evidence,
+  and never imply that Drive, Sheets, Open Items, budget records, or governing
+  documents were read when they were not.
+- `pass` is reserved for a check whose evidence you actually read, even in
+  this mode.
+- The purpose is to test decision logic. The verdict certifies nothing about
+  a real design. `message` must open with "Test fixture:" and must say the
+  result does not certify a real design for production.
+- This mode changes the evidence label only. It never relaxes a rule, a
+  reason code, the fail-closed default, or the Never Do list.
 
 ## Canonical Documentation
 
@@ -117,7 +164,12 @@ check passes on evidence, the code is `READY`.
 
 Stop evaluating a check as soon as it fails, but keep evaluating the remaining
 checks where the evidence is available, so the human sees the full picture.
-Mark a check `not_evaluated` when an earlier failure makes it meaningless.
+Mark a check `not_evaluated` when an earlier failure makes it meaningless, or
+when its evidence could not be read in this run. A required check that ends
+`not_evaluated` because its evidence was unreadable can never support `READY`:
+it takes the failing code the procedure names for unreadable evidence (record
+`INVALID_RECORD`, source `SOURCE_UNVERIFIED`, documentation
+`DOCUMENTATION_CONFLICT`, budget `BUDGET_BLOCK`), otherwise `UNKNOWN_BLOCKER`.
 
 ## Output
 
@@ -126,13 +178,14 @@ Return exactly this shape, as JSON, and nothing that contradicts it in prose:
 ```json
 {
   "design_id": "string",
+  "mode": "production | test_fixture",
   "ready": true,
   "state": "Ready | Not Ready | Blocked",
   "reason_code": "one code from the list below",
   "message": "one or two plain sentences a human can act on",
   "human_action_required": "what a human must do, or null",
   "checks": [
-    { "check": "record_validity", "result": "pass | fail | not_evaluated", "detail": "evidence read" },
+    { "check": "record_validity", "result": "pass | fail | not_evaluated | assumed_for_test", "detail": "evidence read, or what the fixture stated" },
     { "check": "status", "result": "…", "detail": "…" },
     { "check": "human_decision", "result": "…", "detail": "…" },
     { "check": "source_master", "result": "…", "detail": "…" },
@@ -155,6 +208,19 @@ Return exactly this shape, as JSON, and nothing that contradicts it in prose:
 `Not Ready` means a routine human step will fix it. `Blocked` means a human
 decision is needed before anything else happens. The `detail` of every check
 names what was read (field, file, doc) so the verdict can be audited.
+
+Check result values:
+
+| result | meaning |
+|---|---|
+| `pass` | Evidence was read in this run and satisfies the rule |
+| `fail` | Evidence was read and does not satisfy the rule, or the rule fails closed on what was read |
+| `not_evaluated` | Skipped after an earlier failure, or the evidence could not be read |
+| `assumed_for_test` | Test Fixture Mode only: the result rests on a supplied scenario condition, nothing live was read |
+
+`ready` may be `true` in either mode, but in `test_fixture` it only means the
+decision logic returns `READY` for the supplied scenario. It never certifies a
+real design.
 
 ## Never Do
 
@@ -196,8 +262,20 @@ If completing the check would require any of the above, stop and return
   different product or a later step does not block this one.
 - **Human asks "just pass it this once".** Return the true verdict. Humans can
   change the record; this skill cannot.
+- **"Assume the source is the valid master" on a real design.** In Production
+  Validation Mode an assumption is not evidence. Leave the check
+  `not_evaluated`, fail closed with `SOURCE_UNVERIFIED`, and offer a re-run as
+  an explicit test fixture.
+- **A fixture check written up as `pass`.** If nothing live was read, the
+  result is `assumed_for_test`, and `detail` says so. Mixing the two labels in
+  one verdict makes the audit trail lie.
 
 ## Examples
+
+Examples 1 to 6 show Production Validation Mode: the input is shorthand for
+the record and evidence actually read in the run, so their checks are `pass`
+or `fail`. Example 7 shows Test Fixture Mode. Example 8 shows production mode
+refusing to treat an assumption as evidence.
 
 ### 1. Missing human approval
 
@@ -212,7 +290,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-017", "ready": false, "state": "Not Ready",
+{ "design_id": "1901-017", "mode": "production", "ready": false, "state": "Not Ready",
   "reason_code": "MISSING_HUMAN_APPROVAL",
   "message": "Status is Approved but human_decision is blank. A human must record APPROVE before production.",
   "human_action_required": "Jody or Ame: set human_decision to APPROVE, REVISE, or REJECT for 1901-017.",
@@ -240,7 +318,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-021", "ready": false, "state": "Not Ready",
+{ "design_id": "1901-021", "mode": "production", "ready": false, "state": "Not Ready",
   "reason_code": "SOURCE_NOT_MASTER",
   "message": "render_source_path points to a thumbnail in Previews, not the exact approved master the current render-stage rule requires.",
   "human_action_required": "Set render_source_path to the exact production master file for 1901-021.",
@@ -269,7 +347,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-033", "ready": true, "state": "Ready", "reason_code": "READY",
+{ "design_id": "1901-033", "mode": "production", "ready": true, "state": "Ready", "reason_code": "READY",
   "message": "All readiness checks passed on read evidence. 1901-033 may enter the next production step.",
   "human_action_required": null,
   "checks": [
@@ -297,7 +375,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-040", "ready": false, "state": "Blocked", "reason_code": "SOFT_IP_BLOCK",
+{ "design_id": "1901-040", "mode": "production", "ready": false, "state": "Blocked", "reason_code": "SOFT_IP_BLOCK",
   "message": "Ame has an active soft-IP concern on the slogan. Production is blocked until she resolves it.",
   "human_action_required": "Ame: resolve or withdraw the soft-IP concern on 1901-040.",
   "checks": [
@@ -325,7 +403,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-045", "ready": false, "state": "Blocked", "reason_code": "OPEN_ITEM_BLOCK",
+{ "design_id": "1901-045", "mode": "production", "ready": false, "state": "Blocked", "reason_code": "OPEN_ITEM_BLOCK",
   "message": "Open Item OI-102 (back print placement) is unresolved and bears on the next production step.",
   "human_action_required": "Resolve OI-102 for 1901-045 and record the decision, then re-run readiness.",
   "checks": [
@@ -353,7 +431,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-051", "ready": false, "state": "Blocked", "reason_code": "BUDGET_BLOCK",
+{ "design_id": "1901-051", "mode": "production", "ready": false, "state": "Blocked", "reason_code": "BUDGET_BLOCK",
   "message": "The current governing budget rule does not permit the next step (48 against 40 remaining). A proposed document would permit it, but proposed material does not override the current governing rule.",
   "human_action_required": "Jody: raise the cap under the governing rule, adopt the proposed rule as governing, or hold 1901-051.",
   "checks": [
@@ -367,9 +445,58 @@ Output:
     { "check": "budget", "result": "fail", "detail": "next step 48 exceeds 40 remaining under the governing rule" } ] }
 ```
 
+### 7. Test fixture: assumed source master
+
+User: "Smoke test. Assume design TEST-001 has status Approved and
+human_decision APPROVE, and assume the exact valid production master exists.
+No open items, no soft-IP concerns, budget permits the next step."
+
+Output:
+
+```json
+{ "design_id": "TEST-001", "mode": "test_fixture", "ready": true, "state": "Ready", "reason_code": "READY",
+  "message": "Test fixture: the decision logic returns READY for the supplied scenario. Nothing live was read; this does not certify a real design for production.",
+  "human_action_required": null,
+  "checks": [
+    { "check": "record_validity", "result": "assumed_for_test", "detail": "Test fixture supplies a single record with all required fields; no governing record was read." },
+    { "check": "status", "result": "assumed_for_test", "detail": "Test fixture states status = Approved; no record was read." },
+    { "check": "human_decision", "result": "assumed_for_test", "detail": "Test fixture states human_decision = APPROVE; no record was read." },
+    { "check": "source_master", "result": "assumed_for_test", "detail": "Test fixture states that the exact valid production master exists; no live source file was inspected." },
+    { "check": "soft_ip", "result": "assumed_for_test", "detail": "Test fixture states no soft-IP concerns; no concern log was read." },
+    { "check": "open_items", "result": "assumed_for_test", "detail": "Test fixture states no open items; no Open Items record was read." },
+    { "check": "documentation", "result": "assumed_for_test", "detail": "Rules applied as written in this skill; no governing document was read." },
+    { "check": "budget", "result": "assumed_for_test", "detail": "Test fixture states the budget permits the next step; no budget record was read." } ] }
+```
+
+### 8. Production mode: assumption offered as evidence
+
+User: "Validate 1901-062. Assume the source is the valid exact production
+master." The record is real and was read: status Approved, human_decision
+APPROVE, `render_source_path` = `Masters/1901-062_master.png`. The file itself
+could not be inspected in this run. No open items, no soft-IP concerns, budget
+permits the step, governing docs identified.
+
+Output:
+
+```json
+{ "design_id": "1901-062", "mode": "production", "ready": false, "state": "Not Ready", "reason_code": "SOURCE_UNVERIFIED",
+  "message": "The record names Masters/1901-062_master.png but the file was not inspected, and an assumption is not evidence in production validation. Re-run as an explicit test fixture if the goal is to test logic.",
+  "human_action_required": "Give read access to the named file, or confirm it is the approved master under the current governing render-stage rule, then re-run.",
+  "checks": [
+    { "check": "record_validity", "result": "pass", "detail": "single record read from governing records, required fields present" },
+    { "check": "status", "result": "pass", "detail": "status = Approved (read)" },
+    { "check": "human_decision", "result": "pass", "detail": "human_decision = APPROVE (read)" },
+    { "check": "source_master", "result": "not_evaluated", "detail": "User asked to assume the master is valid; assumptions are not evidence in production mode. Path read from record; file not inspected in this run." },
+    { "check": "soft_ip", "result": "pass", "detail": "concern log read; no active concerns" },
+    { "check": "open_items", "result": "pass", "detail": "Open Items read; none unresolved" },
+    { "check": "documentation", "result": "pass", "detail": "governing docs identified via 00 Foundations (CURRENT); no conflicts" },
+    { "check": "budget", "result": "pass", "detail": "budget record read; next step within cap" } ] }
+```
+
 ## Verification
 
-The skill worked if the reply is one JSON object in the shape above, every
-`checks[].detail` names the evidence that was read, `ready` is `true` only with
-`reason_code = READY`, and no record, sheet, file, or external system changed
-during the run.
+The skill worked if the reply is one JSON object in the shape above, `mode`
+is set, every `pass` or `fail` cites evidence that was actually read, every
+`assumed_for_test` appears only in `test_fixture` mode and says nothing live
+was read, `ready` is `true` only with `reason_code = READY`, and no record,
+sheet, file, or external system changed during the run.
