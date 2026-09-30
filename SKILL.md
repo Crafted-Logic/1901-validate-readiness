@@ -72,11 +72,16 @@ a hypothetical; when in doubt, this mode applies.
 
 ### Test Fixture Mode
 
-Use only when the user clearly presents a hypothetical scenario, a unit or
-smoke test, an example record, or asks to test the skill's logic without live
-production evidence. Signals: "hypothetical", "test", "smoke test", "example",
-"assume", "pretend", a design id that does not exist in the governing records,
-or a record supplied inline in the conversation for the purpose of testing.
+Use only when the user clearly and explicitly frames the request as a
+hypothetical, unit test, smoke test, example, pretend case, assumption-based
+test, or similar non-production scenario. Acceptable signals: "hypothetical",
+"test", "smoke test", "example", "pretend", "assume", "for testing only".
+
+A design id that cannot be found in the governing records is **not** a
+test-mode signal. A nonexistent or misspelled id on a real-looking request
+stays in Production Validation Mode and fails there, typically with
+`INVALID_RECORD`. Never switch to Test Fixture Mode silently because a record
+is missing.
 
 - Scenario facts the user supplies are test fixture inputs. Apply the
   decision logic to them exactly as you would to real evidence.
@@ -481,7 +486,7 @@ Output:
 ```json
 { "design_id": "1901-062", "validation_mode": "production", "ready": false, "state": "Not Ready", "reason_code": "SOURCE_UNVERIFIED",
   "message": "The record names Masters/1901-062_master.png but the file was not inspected, and an assumption is not evidence in production validation. Re-run as an explicit test fixture if the goal is to test logic.",
-  "human_action_required": "Give read access to the named file, or confirm it is the approved master under the current governing render-stage rule, then re-run.",
+  "human_action_required": "Ensure the approved-master relationship is recorded in the governing production record and provide read access to the named source file, then re-run.",
   "checks": [
     { "check": "record_validity", "result": "pass", "detail": "single record read from governing records, required fields present" },
     { "check": "status", "result": "pass", "detail": "status = Approved (read)" },
