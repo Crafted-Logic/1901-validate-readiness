@@ -50,7 +50,7 @@ value, the verdict is `INVALID_RECORD`. Never fill a gap with a guess.
 
 ## Operating Modes
 
-Every run is in exactly one mode, and the output names it in `mode`. The two
+Every run is in exactly one mode, and the output names it in `validation_mode`. The two
 modes use different evidence standards and must never be mixed in one verdict.
 
 ### Production Validation Mode (default)
@@ -178,7 +178,7 @@ Return exactly this shape, as JSON, and nothing that contradicts it in prose:
 ```json
 {
   "design_id": "string",
-  "mode": "production | test_fixture",
+  "validation_mode": "test_fixture | production",
   "ready": true,
   "state": "Ready | Not Ready | Blocked",
   "reason_code": "one code from the list below",
@@ -218,7 +218,7 @@ Check result values:
 | `not_evaluated` | Skipped after an earlier failure, or the evidence could not be read |
 | `assumed_for_test` | Test Fixture Mode only: the result rests on a supplied scenario condition, nothing live was read |
 
-`ready` may be `true` in either mode, but in `test_fixture` it only means the
+`ready` may be `true` in either mode, but with `validation_mode = test_fixture` it only means the
 decision logic returns `READY` for the supplied scenario. It never certifies a
 real design.
 
@@ -290,7 +290,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-017", "mode": "production", "ready": false, "state": "Not Ready",
+{ "design_id": "1901-017", "validation_mode": "production", "ready": false, "state": "Not Ready",
   "reason_code": "MISSING_HUMAN_APPROVAL",
   "message": "Status is Approved but human_decision is blank. A human must record APPROVE before production.",
   "human_action_required": "Jody or Ame: set human_decision to APPROVE, REVISE, or REJECT for 1901-017.",
@@ -318,7 +318,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-021", "mode": "production", "ready": false, "state": "Not Ready",
+{ "design_id": "1901-021", "validation_mode": "production", "ready": false, "state": "Not Ready",
   "reason_code": "SOURCE_NOT_MASTER",
   "message": "render_source_path points to a thumbnail in Previews, not the exact approved master the current render-stage rule requires.",
   "human_action_required": "Set render_source_path to the exact production master file for 1901-021.",
@@ -347,7 +347,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-033", "mode": "production", "ready": true, "state": "Ready", "reason_code": "READY",
+{ "design_id": "1901-033", "validation_mode": "production", "ready": true, "state": "Ready", "reason_code": "READY",
   "message": "All readiness checks passed on read evidence. 1901-033 may enter the next production step.",
   "human_action_required": null,
   "checks": [
@@ -375,7 +375,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-040", "mode": "production", "ready": false, "state": "Blocked", "reason_code": "SOFT_IP_BLOCK",
+{ "design_id": "1901-040", "validation_mode": "production", "ready": false, "state": "Blocked", "reason_code": "SOFT_IP_BLOCK",
   "message": "Ame has an active soft-IP concern on the slogan. Production is blocked until she resolves it.",
   "human_action_required": "Ame: resolve or withdraw the soft-IP concern on 1901-040.",
   "checks": [
@@ -403,7 +403,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-045", "mode": "production", "ready": false, "state": "Blocked", "reason_code": "OPEN_ITEM_BLOCK",
+{ "design_id": "1901-045", "validation_mode": "production", "ready": false, "state": "Blocked", "reason_code": "OPEN_ITEM_BLOCK",
   "message": "Open Item OI-102 (back print placement) is unresolved and bears on the next production step.",
   "human_action_required": "Resolve OI-102 for 1901-045 and record the decision, then re-run readiness.",
   "checks": [
@@ -431,7 +431,7 @@ Input:
 Output:
 
 ```json
-{ "design_id": "1901-051", "mode": "production", "ready": false, "state": "Blocked", "reason_code": "BUDGET_BLOCK",
+{ "design_id": "1901-051", "validation_mode": "production", "ready": false, "state": "Blocked", "reason_code": "BUDGET_BLOCK",
   "message": "The current governing budget rule does not permit the next step (48 against 40 remaining). A proposed document would permit it, but proposed material does not override the current governing rule.",
   "human_action_required": "Jody: raise the cap under the governing rule, adopt the proposed rule as governing, or hold 1901-051.",
   "checks": [
@@ -454,7 +454,7 @@ No open items, no soft-IP concerns, budget permits the next step."
 Output:
 
 ```json
-{ "design_id": "TEST-001", "mode": "test_fixture", "ready": true, "state": "Ready", "reason_code": "READY",
+{ "design_id": "TEST-001", "validation_mode": "test_fixture", "ready": true, "state": "Ready", "reason_code": "READY",
   "message": "Test fixture: the decision logic returns READY for the supplied scenario. Nothing live was read; this does not certify a real design for production.",
   "human_action_required": null,
   "checks": [
@@ -479,7 +479,7 @@ permits the step, governing docs identified.
 Output:
 
 ```json
-{ "design_id": "1901-062", "mode": "production", "ready": false, "state": "Not Ready", "reason_code": "SOURCE_UNVERIFIED",
+{ "design_id": "1901-062", "validation_mode": "production", "ready": false, "state": "Not Ready", "reason_code": "SOURCE_UNVERIFIED",
   "message": "The record names Masters/1901-062_master.png but the file was not inspected, and an assumption is not evidence in production validation. Re-run as an explicit test fixture if the goal is to test logic.",
   "human_action_required": "Give read access to the named file, or confirm it is the approved master under the current governing render-stage rule, then re-run.",
   "checks": [
@@ -495,7 +495,7 @@ Output:
 
 ## Verification
 
-The skill worked if the reply is one JSON object in the shape above, `mode`
+The skill worked if the reply is one JSON object in the shape above, `validation_mode`
 is set, every `pass` or `fail` cites evidence that was actually read, every
 `assumed_for_test` appears only in `test_fixture` mode and says nothing live
 was read, `ready` is `true` only with `reason_code = READY`, and no record,
